@@ -15,7 +15,7 @@ parser.add_argument("--lineup", type=str, help="LINEUP_ID", default="CAN-lineupI
 parser.add_argument("--postal", type=str)
 parser.add_argument("--country", type=str, default="CAN")
 parser.add_argument("--days", type=int, default=1)
-parser.add_argument("--output", "-o", type=str, default="gracenote.xml", help="Output file")
+parser.add_argument("--output", "-o", type=str, help="Output file", default="gracenote.xml")
 args=parser.parse_args()
 
 if args.lineup is None:
@@ -54,14 +54,33 @@ HEADERS = {
 
 # Generate random episode number
 # This is used to trick Jellyfin into thinking this program is part of a series
-def generate_random_episode_num():
+def generate_random_episode_num(start_time, mode):
     """
     Generate a random episode number in xmltv_ns format: 'S.E.N'
     """
-    season = random.randint(1, 99)
-    episode = random.randint(1, 99)
-    #return f"S{season:02d}E{episode:02d}"
-    return f"{season}.{episode}.0"
+    # Fully random
+    #season = random.randint(1, 99)
+    #episode = random.randint(1, 99)
+    #return f"{season}.{episode}.0"
+
+    # Time-based
+    utc_time = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%SZ")
+    utc_time = utc_time.replace(tzinfo=timezone.utc)
+    dt = utc_time.astimezone()
+
+    hour = dt.hour
+    minute = dt.minute
+    half_hours = (hour * 2) + (1 if minute >= 30 else 0)
+    day_of_year = dt.timetuple().tm_yday
+
+    # Note that xmltv_ns is zero-indexed
+    if (mode == "xmltv_ns"):
+        return f"{dt.month - 1}.{dt.day - 1}.{half_hours}/48" # xmltv_ns format
+    if (mode == "dd_progid"):
+        return f"{dt.month:02d}{dt.day:02d}{half_hours:02d}"  # dd_progid format
+    if (mode == "xmltv_ns_doy"):
+        return f"{day_of_year - 1}.{half_hours}.0"                # xmltv_ns day-of-year format
+    return
 
 
 # Convert UTC timestamps to local timezone with whatever format
@@ -71,7 +90,7 @@ def time_to_local(utc_timestamp):
         utc_time = utc_time.replace(tzinfo=timezone.utc)
         #print (utc_time.strftime("%Y-%m-%d %H:%M"))
 
-        local_dt = dt_utc.astimezone()
+        local_dt = utc_time.astimezone()
         return local_dt.strftime("%Y-%m-%d %H:%M")
 
     except Exception as e:
@@ -169,8 +188,12 @@ def add_program(event, channel_id, tv):
     if (prog.find('episode-num') is None):
         for pattern in force_series:
             if fnmatch.fnmatch(prog.find('title').text, pattern):
-#                print (f"Forcing series: {prog.find('title').text}")
-                ET.SubElement(prog, 'episode-num', system='xmltv_ns').text = "0.0.0"
+    #            if program.get('tmsId') is not None:
+    #                progid = program.get('tmsId') + generate_random_episode_num(event['startTime'], "dd_progid")
+    #                ET.SubElement(prog, 'episode-num', system='dd_progid').text = progid
+    #            else:
+    #                ET.SubElement(prog, 'episode-num', system='xmltv_ns').text = generate_random_episode_num(event['startTime'], "xmltv_ns")
+                ET.SubElement(prog, 'episode-num', system='xmltv_ns').text = generate_random_episode_num(event['startTime'], "xmltv_ns_doy")
 
 
 def main():
