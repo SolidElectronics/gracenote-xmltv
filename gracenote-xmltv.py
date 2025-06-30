@@ -172,9 +172,11 @@ def add_program(event, channel_id, tv):
     # can add lang='en' to all these subelements later
     ET.SubElement(prog, 'title').text = program.get('title', 'No Title')
     # sub-title
+    has_subtitle = False
     if 'episodeTitle' in program:
         if program.get('episodeTitle') is not None:
             ET.SubElement(prog, 'sub-title').text = program.get('episodeTitle')
+            has_subtitle = True
     # desc
     if 'shortDesc' in program:
         if program.get('shortDesc') is not None:
@@ -184,17 +186,20 @@ def add_program(event, channel_id, tv):
         if program.get('season') is not None and program.get('episode') is not None:
             ET.SubElement(prog, 'episode-num', system='xmltv_ns').text = f"{program.get('season')}.{program.get('episode')}.0"
 
-    # If there's no episode set already, see if we need to make it look like a series with a fake episode number
+    # If there is no episode number but this is overridden to be a series, we need to create an episode name and number.
     if (prog.find('episode-num') is None):
         for pattern in force_series:
             if fnmatch.fnmatch(prog.find('title').text, pattern):
-    #            if program.get('tmsId') is not None:
-    #                progid = program.get('tmsId') + generate_random_episode_num(event['startTime'], "dd_progid")
-    #                ET.SubElement(prog, 'episode-num', system='dd_progid').text = progid
-    #            else:
-    #                ET.SubElement(prog, 'episode-num', system='xmltv_ns').text = generate_random_episode_num(event['startTime'], "xmltv_ns")
                 ET.SubElement(prog, 'episode-num', system='xmltv_ns').text = generate_random_episode_num(event['startTime'], "xmltv_ns_doy")
+                if not has_subtitle:
+                    ET.SubElement(prog, 'sub-title').text = time_to_local(event['startTime'])
 
+    # Identify movies in EPG
+    if ('seriesId' in program):
+        if program.get('seriesId') is not None:
+            category = program.get('seriesId')
+            if category.startswith('MV'):
+                ET.SubElement(prog, 'category').text = "Movie"
 
 def main():
     # Create main XML doc to hold results
